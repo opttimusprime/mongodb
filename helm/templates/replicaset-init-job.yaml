@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-replicaset-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      serviceAccountName: mongodb-sa
+      restartPolicy: OnFailure
+      containers:
+        - name: mongodb-replicaset-init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGO_INITDB_ROOT_USERNAME
+
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGO_INITDB_ROOT_PASSWORD
+
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Waiting for MongoDB pods..."
+              sleep 60
+
+              mongosh \
+                --host mongodb-0.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017 \
+                -u "$MONGO_INITDB_ROOT_USERNAME" \
+                -p "$MONGO_INITDB_ROOT_PASSWORD" \
+                --authenticationDatabase admin <<EOF
+              try {
+                rs.status();
+                print("ReplicaSet already initialized. Exiting...");
+              } catch (e) {
+                print("ReplicaSet not initialized. Initializing now...");
+
+                rs.initiate({
+                  _id: "{{ .Values.replicaSetName }}",
+                  members: [
+                    {{- range $i := until (.Values.replicaCount | int) }}
+                    {
+                      _id: {{ $i }},
+                      host: "mongodb-{{ $i }}.mongodb-headless.{{ $.Release.Namespace }}.svc.cluster.local:27017"
+                    }{{ if lt $i (sub ($.Values.replicaCount | int) 1) }},{{ end }}
+                    {{- end }}
+                  ]
+                });
+              }
+              EOF

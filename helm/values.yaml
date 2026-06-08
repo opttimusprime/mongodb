@@ -1,0 +1,39 @@
+replicaCount: 2
+
+replicaSetName: rs0
+
+image:
+  repository: mongo
+  tag: "7.0"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 27017
+
+persistence:
+  enabled: true
+  storageClass: gp3
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+initScript:
+  configMapName: mongodb-init-script
+  fileName: mongo-init.js
+
+externalSecret:
+  enabled: true
+  refreshInterval: 1h
+  secretStoreName: aws-secretsmanager
+  secretStoreKind: ClusterSecretStore
+  awsSecretName: roboshop/dev/mongodb
+  targetSecretName: mongodb-secret
