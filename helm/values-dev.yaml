@@ -1,5 +1,4 @@
-replicaCount: 2
-
+replicaCount: 3
 replicaSetName: rs0
 
 image:
@@ -7,18 +6,29 @@ image:
   tag: "7.0"
   pullPolicy: Always
 
+service:
+  type: ClusterIP
+  port: 27017
+
 persistence:
+  enabled: true
   storageClass: gp3
   size: 10Gi
+  accessModes:
+    - ReadWriteOnce
 
 resources:
   requests:
     cpu: 250m
     memory: 512Mi
-
   limits:
     cpu: 500m
     memory: 1Gi
 
 externalSecret:
+  enabled: true
+  refreshInterval: 1h
+  secretStoreName: aws-secretsmanager
+  secretStoreKind: ClusterSecretStore
   awsSecretName: roboshop/dev/mongodb
+  targetSecretName: mongodb-secret

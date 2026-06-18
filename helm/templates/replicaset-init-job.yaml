@@ -7,10 +7,12 @@ metadata:
     app: mongodb
 spec:
   backoffLimit: 5
+
   template:
     spec:
       serviceAccountName: mongodb-sa
       restartPolicy: OnFailure
+
       containers:
         - name: mongodb-replicaset-init
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -34,7 +36,7 @@ spec:
             - -c
             - |
               echo "Waiting for MongoDB pods..."
-              sleep 60
+              sleep 90
 
               mongosh \
                 --host mongodb-0.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017 \

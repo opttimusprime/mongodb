@@ -8,13 +8,16 @@ metadata:
 spec:
   serviceName: mongodb-headless
   replicas: {{ .Values.replicaCount }}
+
   selector:
     matchLabels:
       app: mongodb
+
   template:
     metadata:
       labels:
         app: mongodb
+
     spec:
       serviceAccountName: mongodb-sa
 
@@ -39,8 +42,10 @@ spec:
         - name: mongodb
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+
           command:
             - docker-entrypoint.sh
+
           args:
             - mongod
             - "--bind_ip_all"
@@ -49,6 +54,7 @@ spec:
             - "--auth"
             - "--keyFile"
             - "/etc/mongodb-keyfile/keyfile"
+
           ports:
             - name: mongodb
               containerPort: {{ .Values.service.port }}
@@ -73,19 +79,11 @@ spec:
             - name: mongodb-data
               mountPath: /data/db
 
-            - name: mongodb-init-script
-              mountPath: /docker-entrypoint-initdb.d/{{ .Values.initScript.fileName }}
-              subPath: {{ .Values.initScript.fileName }}
-
             - name: mongodb-keyfile
               mountPath: /etc/mongodb-keyfile
               readOnly: true
 
       volumes:
-        - name: mongodb-init-script
-          configMap:
-            name: {{ .Values.initScript.configMapName }}
-
         - name: mongodb-secret-volume
           secret:
             secretName: mongodb-secret

@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-catalogue-seed
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mongodb
+    job: catalogue-seed
+spec:
+  backoffLimit: 5
+
+  template:
+    spec:
+      serviceAccountName: mongodb-sa
+      restartPolicy: OnFailure
+
+      containers:
+        - name: catalogue-seed
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGO_INITDB_ROOT_USERNAME
+
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGO_INITDB_ROOT_PASSWORD
+
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Waiting for MongoDB ReplicaSet to be ready..."
+              sleep 120
+
+              mongosh \
+                "mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@mongodb-0.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017/admin?replicaSet={{ .Values.replicaSetName }}" \
+                /scripts/mongo-init.js
+
+              echo "Catalogue seed completed"
+
+          volumeMounts:
+            - name: mongo-init-script
+              mountPath: /scripts/mongo-init.js
+              subPath: mongo-init.js
+
+      volumes:
+        - name: mongo-init-script
+          configMap:
+            name: mongodb-init-script
