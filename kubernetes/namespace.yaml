@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: mongodb
+  name: ns-mongodb
   labels:
     app: mongodb
     project: roboshop
