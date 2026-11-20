@@ -4,3 +4,4 @@ metadata:
   name: mongodb
   labels:
     app: mongodb
+    project: roboshop
