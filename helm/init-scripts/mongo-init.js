@@ -1,8 +1,6 @@
-//
-// Products
-//
 db = db.getSiblingDB('catalogue');
-db.products.insertMany([
+
+const products = [
     {sku: 'Watson', name: 'Watson', description: 'Probably the smartest AI on the planet', price: 2001, instock: 2, categories: ['Artificial Intelligence']},
     {sku: 'Ewooid', name: 'Ewooid', description: 'Fully sentient assistant', price: 200, instock: 0, categories: ['Artificial Intelligence']},
     {sku: 'HPTD', name: 'High-Powered Travel Droid', description: 'Traveling to the far reaches of the Galaxy? You need this for protection. Comes in handy when you are lost in space', price: 1200, instock: 12, categories: ['Robot']},
@@ -14,17 +12,27 @@ db.products.insertMany([
     {sku: 'RMC', name: 'Robotic Mining Cyborg', description: 'Excellent tunneling capability to get those rare minerals', price: 42, instock: 48, categories: ['Robot']},
     {sku: 'STAN-1', name: 'Stan', description: 'Observability guru', price: 67, instock: 1000, categories: ['Robot', 'Artificial Intelligence']},
     {sku: 'CNA', name: 'Cybernated Neutralization Android', description: 'Is your spaceship a bit whiffy? This little fellow will bring a breath of fresh air', price: 1000, instock: 0, categories: ['Robot']}
-]);
+];
 
-// full text index for searching
-db.products.createIndex({
-    name: "text",
-    description: "text"
-});
-
-// unique index for product sku
+// Unique index for product SKU
 db.products.createIndex(
     { sku: 1 },
     { unique: true }
 );
 
+// Insert products only if they do not already exist
+products.forEach(product => {
+    db.products.updateOne(
+        { sku: product.sku },
+        { $setOnInsert: product },
+        { upsert: true }
+    );
+});
+
+// Full text index for searching
+db.products.createIndex({
+    name: "text",
+    description: "text"
+});
+
+print("Catalogue seed completed successfully");

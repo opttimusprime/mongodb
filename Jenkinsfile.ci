@@ -1,0 +1,57 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Check Helm Version') {
+            steps {
+                sh 'helm version'
+            }
+        }
+
+        stage('Helm Lint') {
+            steps {
+                sh 'helm lint ./helm'
+            }
+        }
+
+        stage('Helm Template') {
+            steps {
+                sh '''
+                    helm template mongodb ./helm \
+                        --namespace mongodb
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'MongoDB CI validation successful'
+
+            build job: 'rs-mongodb-cd',
+                  parameters: [
+                      string(
+                          name: 'GIT_COMMIT_SHA',
+                          value: env.GIT_COMMIT
+                      )
+                  ],
+                  wait: false
+        }
+
+        failure {
+            echo 'MongoDB CI validation failed'
+        }
+    }
+}
