@@ -11,6 +11,15 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+
+                script {
+                    env.GIT_COMMIT_SHA = sh(
+                        script: 'git rev-parse HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Git Commit SHA: ${env.GIT_COMMIT_SHA}"
+                }
             }
         }
 
@@ -39,12 +48,13 @@ pipeline {
     post {
         success {
             echo 'MongoDB CI validation successful'
+            echo "Passing Git Commit SHA: ${env.GIT_COMMIT_SHA}"
 
             build job: 'rs-mongodb-cd',
                   parameters: [
                       string(
                           name: 'GIT_COMMIT_SHA',
-                          value: env.GIT_COMMIT
+                          value: env.GIT_COMMIT_SHA
                       )
                   ],
                   wait: false
