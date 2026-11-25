@@ -10,5 +10,5 @@ spec:
     app: mongodb
   ports:
     - name: mongodb
-      port: {{ .Values.service.port }}
+      port: 27017
       targetPort: 27017

@@ -6,8 +6,14 @@ metadata:
   labels:
     app: mongodb
     job: catalogue-seed
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+
 spec:
   backoffLimit: 5
+  activeDeadlineSeconds: 600
 
   template:
     spec:
@@ -16,8 +22,8 @@ spec:
 
       containers:
         - name: catalogue-seed
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
 
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
@@ -36,19 +42,39 @@ spec:
             - /bin/bash
             - -c
             - |
-              echo "Waiting for MongoDB ReplicaSet to be ready..."
-              sleep 120
+              set -e
 
-              mongosh \
-                "mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@mongodb-0.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017/admin?replicaSet={{ .Values.replicaSetName }}" \
+              MONGO_URI="mongodb://mongodb-0.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017,mongodb-1.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017/admin?replicaSet=rs0"
+
+              echo "Waiting for MongoDB writable primary..."
+
+              until mongosh "$MONGO_URI" \
+                -u "$MONGO_INITDB_ROOT_USERNAME" \
+                -p "$MONGO_INITDB_ROOT_PASSWORD" \
+                --authenticationDatabase admin \
+                --quiet \
+                --eval 'quit(db.hello().isWritablePrimary ? 0 : 1)' \
+                >/dev/null 2>&1
+              do
+                echo "Waiting for primary election..."
+                sleep 5
+              done
+
+              echo "MongoDB ReplicaSet is ready"
+
+              mongosh "$MONGO_URI" \
+                -u "$MONGO_INITDB_ROOT_USERNAME" \
+                -p "$MONGO_INITDB_ROOT_PASSWORD" \
+                --authenticationDatabase admin \
                 /scripts/mongo-init.js
 
-              echo "Catalogue seed completed"
+              echo "Catalogue seed completed successfully"
 
           volumeMounts:
             - name: mongo-init-script
               mountPath: /scripts/mongo-init.js
               subPath: mongo-init.js
+              readOnly: true
 
       volumes:
         - name: mongo-init-script

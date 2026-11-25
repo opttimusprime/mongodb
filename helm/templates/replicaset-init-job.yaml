@@ -5,8 +5,14 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     app: mongodb
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+
 spec:
   backoffLimit: 5
+  activeDeadlineSeconds: 600
 
   template:
     spec:
@@ -15,8 +21,8 @@ spec:
 
       containers:
         - name: mongodb-replicaset-init
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
 
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
@@ -35,30 +41,64 @@ spec:
             - /bin/bash
             - -c
             - |
+              set -e
+
               echo "Waiting for MongoDB pods..."
-              sleep 90
+
+              for i in 0 1; do
+                until mongosh \
+                  "mongodb://mongodb-${i}.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017/admin?directConnection=true" \
+                  -u "$MONGO_INITDB_ROOT_USERNAME" \
+                  -p "$MONGO_INITDB_ROOT_PASSWORD" \
+                  --authenticationDatabase admin \
+                  --quiet \
+                  --eval 'db.adminCommand({ping: 1})' \
+                  >/dev/null 2>&1
+                do
+                  echo "Waiting for mongodb-${i}..."
+                  sleep 5
+                done
+              done
+
+              echo "Both MongoDB pods are reachable"
 
               mongosh \
-                --host mongodb-0.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017 \
+                "mongodb://mongodb-0.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017/admin?directConnection=true" \
                 -u "$MONGO_INITDB_ROOT_USERNAME" \
                 -p "$MONGO_INITDB_ROOT_PASSWORD" \
-                --authenticationDatabase admin <<EOF
-              try {
-                rs.status();
-                print("ReplicaSet already initialized. Exiting...");
-              } catch (e) {
-                print("ReplicaSet not initialized. Initializing now...");
+                --authenticationDatabase admin \
+                --quiet \
+                --eval '
+                  try {
+                    rs.status();
+                    print("ReplicaSet already initialized.");
+                  } catch (e) {
+                    if (e.code !== 94) {
+                      throw e;
+                    }
 
-                rs.initiate({
-                  _id: "{{ .Values.replicaSetName }}",
-                  members: [
-                    {{- range $i := until (.Values.replicaCount | int) }}
-                    {
-                      _id: {{ $i }},
-                      host: "mongodb-{{ $i }}.mongodb-headless.{{ $.Release.Namespace }}.svc.cluster.local:27017"
-                    }{{ if lt $i (sub ($.Values.replicaCount | int) 1) }},{{ end }}
-                    {{- end }}
-                  ]
-                });
-              }
-              EOF
+                    print("Initializing ReplicaSet...");
+
+                    const result = rs.initiate({
+                      _id: "rs0",
+                      members: [
+                        {
+                          _id: 0,
+                          host: "mongodb-0.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017"
+                        },
+                        {
+                          _id: 1,
+                          host: "mongodb-1.mongodb-headless.{{ .Release.Namespace }}.svc.cluster.local:27017"
+                        }
+                      ]
+                    });
+
+                    if (result.ok !== 1) {
+                      throw new Error(JSON.stringify(result));
+                    }
+
+                    print("ReplicaSet initialization successful.");
+                  }
+                '
+
+              echo "ReplicaSet initialization Job completed"
